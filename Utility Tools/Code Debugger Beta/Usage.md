@@ -1,3 +1,4 @@
+```Luau
 --[[
   Solo Dev Rollo It.
   Rev Contains These Modifiable Features:
@@ -19,3 +20,4 @@ end
 Rev:Callback(Test)
 
 -- Callback Could Contain A Function Directly.
+```
