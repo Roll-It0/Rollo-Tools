@@ -1,0 +1,55 @@
+local Rev = {
+  ShowStatus = true,
+  ShowResult = true
+}
+local Proxy = newproxy(true)
+getmetatable(Proxy).__index = function() return Proxy end
+getmetatable(Proxy).__call = function() return Proxy end
+function Rev:Callback(fn,...)
+  local start = os.clock()
+  local errors,reported = {},{}
+  local old;old = hookmetamethod(game,"__index",newcclosure(function(self,key)
+    local success,result = pcall(old,self,key)
+    if not success or result == nil then
+      local line = 0
+      for i=1,10 do
+        local info = debug.getinfo(i,"Sl")
+        if info and info.currentline > 0 and i > 1 then
+          line = info.currentline
+          break
+        end
+      end
+      local path = self:GetFullName().."."..tostring(key)
+      if not reported[path] then
+        reported[path] = true
+        local is = (self.ClassName == "RemoteEvent" or self.ClassName == "RemoteFunction")
+        table.insert(errors,string.format(
+        "[%d]: Invalid %s (%s)",
+        line,
+        is and "Remote" or "Path",
+        path
+        ))
+      end
+      return Proxy
+    end
+    return result
+  end))
+  local ok,result = xpcall(fn,function(err) return err end,...)
+  hookmetamethod(game,"__index",old)
+  local elapsed = os.clock()-start
+  local pattern = #errors > 0
+  local check = ok and not pattern
+  if pattern then
+    warn(table.concat(errors,"\n"))
+  end
+  if Rev.ShowStatus then
+    print("Status:",check and "Working." or "Failed.")
+  end
+  if Rev.ShowResult and not check then
+    local msg = not ok and tostring(result):split("\n")[1] or errors[1]
+    print("Result:",msg..".")
+  end
+  print(string.format("Time: %f.",elapsed))
+  return check,result,elapsed
+end
+return Rev
