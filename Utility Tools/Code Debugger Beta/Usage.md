@@ -21,4 +21,12 @@ end
 Rev:Callback(Test)
 
 -- Callback Could Contain A Function Directly.
+
+Rev:Callback(function()
+  local part = Instance.new("Part")
+  local some_event = part.MissingChild -- variable name.
+  part:FireServer() -- detection.
+  part:GetAttribute("Missing")
+  part:SetAttribute("Missing",10)
+end)
 ```
