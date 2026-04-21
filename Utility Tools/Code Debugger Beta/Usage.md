@@ -1,7 +1,7 @@
 ```Luau
 -- Note. Result Is Always The First Problem.
 --[[
-  Solo Dev Rollo It.
+  Solo Dev Roll It.
   Rev Contains These Modifiable Features:
   ShowStatus
   ShowResult
