@@ -3,53 +3,95 @@ local Rev = {
   ShowResult = true
 }
 local Proxy = newproxy(true)
-getmetatable(Proxy).__index = function() return Proxy end
-getmetatable(Proxy).__call = function() return Proxy end
+local mt = getmetatable(Proxy)
+mt.__index,mt.__call,mt.__namecall = function() return Proxy end,function() return Proxy end,function() return Proxy end
 function Rev:Callback(fn,...)
   local start = os.clock()
   local errors,reported = {},{}
-  local old;old = hookmetamethod(game,"__index",newcclosure(function(self,key)
-    local success,result = pcall(old,self,key)
-    if not success or result == nil then
-      local line = 0
-      for i=1,10 do
-        local info = debug.getinfo(i,"Sl")
-        if info and info.currentline > 0 and i > 1 then
-          line = info.currentline
-          break
-        end
+  local checking = false
+  local function liner()
+    for i=3,10 do
+      local lines = debug.info(i,"l")
+      if lines and lines > 0 then return lines end
+    end
+    return 0
+  end
+  local function remote(self,key,level)
+    local res,obj = pcall(function() return self.ClassName end)
+    if res and (obj:find("Remote") or obj:find("Event")) then return true end
+    local str = typeof(key) == "string" and key:lower() or ""
+    if str:find("remote") or str:find("event") then return true end
+    local res_ = pcall(function()
+      local i = 1
+      while true do
+        local name = debug.getlocal(level+2,i)
+        if not name then break end
+        local n = tostring(name):lower()
+        if n:find("remote") or n:find("event") then return true end
+        i += 1
       end
+    end)
+    return res_ == true
+  end
+  local old;old = hookmetamethod(game,"__index",newcclosure(function(self,key)
+    if checking or typeof(self) ~= "Instance" then return old(self,key) end
+    local res,val = pcall(old,self,key)
+    if not res or val == nil then
+      local line = liner()
       local path = self:GetFullName().."."..tostring(key)
       if not reported[path] then
         reported[path] = true
-        local is = (self.ClassName == "RemoteEvent" or self.ClassName == "RemoteFunction")
-        table.insert(errors,string.format(
-        "[%d]: Invalid %s (%s)",
-        line,
-        is and "Remote" or "Path",
-        path
-        ))
+        checking = true
+        local is = remote(self,key,2)
+        checking = false
+        table.insert(errors,string.format("[%d]: Invalid %s (%s)",line,is and "Remote" or "Path",path))
       end
       return Proxy
     end
-    return result
+    return val
   end))
-  local ok,result = xpcall(fn,function(err) return err end,...)
+  local old_;old_ = hookmetamethod(game,"__namecall",newcclosure(function(self,...)
+    if checking or typeof(self) ~= "Instance" then return old_(self,...) end
+    local method = getnamecallmethod()
+    local args = {...}
+    local patterns = {FireServer = true,InvokeServer = true,Fire = true,Invoke = true,FireAllClients = true,FireClient = true,OnClientEvent = true,OnServerEvent = true}
+    if patterns[method] then
+      local res,obj = pcall(function() return self.ClassName end)
+      local valid = res and (obj:find("Remote") or obj:find("Event") or obj:find("Bindable"))
+      if not valid then
+        local path = self:GetFullName()
+        if not reported[path..":Remote"] then
+          reported[path..":Remote"] = true
+          table.insert(errors,string.format("[%d]: Invalid Remote (%s)",liner(),path))
+        end
+        return Proxy
+      end
+    end
+    if method == "GetAttribute" or method == "SetAttribute" then
+      local name = args[1]
+      checking = true
+      local val = self:GetAttribute(name)
+      checking = false
+      if val == nil then
+        local line = liner()
+        local msg = string.format("[%d]: Invalid Attribute (%s for [%s] of \"%s\")",line,method,self.Name,tostring(name))
+        if not reported[msg] then
+          reported[msg] = true
+          table.insert(errors,msg)
+        end
+      end
+    end
+    return old_(self,...)
+  end))
+  local res,val = xpcall(fn,function(err) return debug.traceback(err,2) end,...)
   hookmetamethod(game,"__index",old)
+  hookmetamethod(game,"__namecall",old_)
   local elapsed = os.clock()-start
-  local pattern = #errors > 0
-  local check = ok and not pattern
-  if pattern then
-    warn(table.concat(errors,"\n"))
-  end
+  if #errors > 0 then warn(table.concat(errors,"\n")) end
   if Rev.ShowStatus then
-    print("Status:",check and "Working." or "Failed.")
-  end
-  if Rev.ShowResult and not check then
-    local msg = not ok and tostring(result):split("\n")[1] or errors[1]
-    print("Result:",msg..".")
+    print(string.format("Status: %s",#errors > 0 and "Failed." or "Working."))
   end
   print(string.format("Time: %f.",elapsed))
-  return check,result,elapsed
+  return res,val,elapsed
 end
 return Rev
